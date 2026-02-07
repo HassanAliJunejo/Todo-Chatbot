@@ -153,11 +153,10 @@ async function handler(req: Request, ctx: { params: Promise<{ path: string[] }> 
 
     return NextResponse.json({}, { status: 200 });
   } catch (error) {
-    console.error('Proxy handler error:', error, 'Path:', transformedPath);
+    console.error('Proxy handler error:', error);
     return NextResponse.json({
       message: "Proxy error occurred",
       error: error instanceof Error ? error.message : String(error),
-      path: transformedPath
     }, { status: 500 });
   }
 }
