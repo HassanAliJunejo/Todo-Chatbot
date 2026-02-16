@@ -119,9 +119,8 @@ class AddTaskTool:
                 "message": f"Failed to add task: {str(e)}"
             }
         except Exception as e:
-            import traceback
-            print(f"DEBUG: Error in add_task: {str(e)}")
-            traceback.print_exc()
+            import logging
+            logging.getLogger("ai_chatbot").error(f"Error in add_task: {e}")
             return {
                 "success": False,
                 "error": str(e),

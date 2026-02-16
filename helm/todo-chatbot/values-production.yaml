@@ -1,0 +1,132 @@
+# Production environment values
+# Use with external secret management
+
+backend:
+  replicaCount: 3  # High availability
+
+  image:
+    repository: your-registry.io/todo-chatbot-backend
+    tag: "1.0.0"  # Use specific version tags in production
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  # Production secrets - MUST be overridden via external secret management
+  # DO NOT commit real values here
+  secrets:
+    DATABASE_URL: "REPLACE_WITH_EXTERNAL_SECRET"
+    COHERE_API_KEY: "REPLACE_WITH_EXTERNAL_SECRET"
+    JWT_SECRET: "REPLACE_WITH_EXTERNAL_SECRET"
+
+  env:
+    LOG_LEVEL: "info"
+    ENVIRONMENT: "production"
+
+  # Enable autoscaling in production
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+frontend:
+  replicaCount: 2  # Multiple replicas for HA
+
+  image:
+    repository: your-registry.io/todo-chatbot-frontend
+    tag: "1.0.0"  # Use specific version tags in production
+    pullPolicy: IfNotPresent
+
+  service:
+    type: LoadBalancer  # Or use Ingress
+    port: 3000
+    targetPort: 3000
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  env:
+    NODE_ENV: "production"
+
+  # Enable autoscaling in production
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Production-grade pod disruption budgets
+podDisruptionBudget:
+  backend:
+    enabled: true
+    minAvailable: 2
+  frontend:
+    enabled: true
+    minAvailable: 1
+
+# Anti-affinity to spread pods across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - todo-chatbot-backend
+            - todo-chatbot-frontend
+        topologyKey: kubernetes.io/hostname

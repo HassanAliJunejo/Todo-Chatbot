@@ -1,0 +1,97 @@
+# Development environment values for Minikube
+# Override default values for local development
+
+backend:
+  replicaCount: 1  # Single replica for dev
+
+  image:
+    repository: todo-chatbot-backend
+    tag: latest
+    pullPolicy: Never  # Use local images in Minikube
+
+  # Override health probes to use root endpoint (no /health in main app)
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Development secrets (safe for local use)
+  secrets:
+    DATABASE_URL: "sqlite:///./todo_backend.db"
+    COHERE_API_KEY: "dev-api-key-replace-me"
+    JWT_SECRET: "dev-jwt-secret-change-in-production"
+
+  env:
+    LOG_LEVEL: "debug"
+    ENVIRONMENT: "development"
+
+  autoscaling:
+    enabled: false
+
+frontend:
+  replicaCount: 1
+
+  image:
+    repository: todo-chatbot-frontend
+    tag: latest
+    pullPolicy: Never  # Use local images in Minikube
+
+  service:
+    type: NodePort
+    port: 3000
+    targetPort: 3000
+    nodePort: 30080
+
+  # Override health probes
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  env:
+    NODE_ENV: "development"
+
+  autoscaling:
+    enabled: false

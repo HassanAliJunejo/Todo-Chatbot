@@ -1,0 +1,25 @@
+# Helm chart .gitignore
+# Prevent committing sensitive files
+
+# Secret files - NEVER commit these
+secrets-*.yaml
+!secrets-*.yaml.example
+
+# Environment-specific overrides with real credentials
+values-*.local.yaml
+
+# Helm package files
+*.tgz
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

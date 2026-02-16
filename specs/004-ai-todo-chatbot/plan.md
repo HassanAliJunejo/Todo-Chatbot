@@ -1,108 +1,267 @@
-# Implementation Plan: AI Todo Chatbot with Cohere Integration
+# Implementation Plan: AI Todo Chatbot — Full Integration
 
-## Overview
-This plan outlines the step-by-step implementation of an AI-powered Todo Chatbot into the existing Full-Stack Todo Application, using Cohere as the LLM, OpenAI Agents SDK, MCP Server, and FastAPI backend.
+**Branch**: `004-ai-todo-chatbot` | **Date**: 2026-02-14 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from `/specs/004-ai-todo-chatbot/spec.md` (v2)
 
-## Phase 1 — Foundation & Setup
-1. Set up environment variables for Cohere API key, database, and authentication
-2. Create backend folder structure for AI chatbot components: `/backend/ai_chatbot/`
-3. Initialize MCP server for AI tool integration
-4. Configure OpenAI Agent SDK with Cohere-backed model
-5. Install required dependencies: cohere, openai, fastapi, sqlmodel
-6. Set up configuration management for LLM provider selection
+## Summary
 
-## Phase 2 — Database & Models
-1. Define SQLModel schemas for Task entity with relationships to User
-2. Create Conversation model with user_id foreign key and metadata
-3. Create Message model with conversation_id foreign key, role, content, timestamp
-4. Establish proper indexing for efficient querying (user_id, conversation_id, created_at)
-5. Design migration strategy using Alembic for schema evolution
-6. Implement conversation state management for multi-turn interactions
-7. Create repository classes for database operations
+Integrate a production-ready AI Todo Chatbot into the existing full-stack
+Todo application. The chatbot uses Cohere as the LLM, MCP tools for all
+task operations, and persists conversations in a stateless architecture.
+The core backend (agent, tools, endpoints, models) is already implemented.
+Remaining work focuses on containerization (Docker), orchestrated
+deployment (Helm/Minikube), validation, and final hardening.
 
-## Phase 3 — MCP TOOLS IMPLEMENTATION
-1. Implement add_task MCP tool with validation for required fields
-2. Implement list_tasks MCP tool with filtering capabilities (all, pending, completed)
-3. Implement complete_task MCP tool with proper status updates
-4. Implement delete_task MCP tool with soft/hard delete options
-5. Implement update_task MCP tool for modifying task properties
-6. Create tool validation rules to ensure proper input sanitization
-7. Develop error handling strategy for each tool (validation, database, business logic)
-8. Map tools to appropriate database repository methods
-9. Implement tool response formatting for agent consumption
+## Technical Context
 
-## Phase 4 — AI AGENT IMPLEMENTATION
-1. Define agent with specific instructions for task management
-2. Bind MCP tools to the agent with proper function signatures
-3. Configure Cohere as the LLM provider with appropriate parameters
-4. Set up agent runner with conversation context management
-5. Implement multi-tool chaining for complex operations
-6. Create response templates for friendly, confirmatory responses
-7. Add natural language understanding for various task management commands
-8. Implement fallback responses for unrecognized commands
-9. Add conversation memory management for context preservation
+**Language/Version**: Python 3.11 (backend), TypeScript/Node 18+ (frontend)
+**Primary Dependencies**: FastAPI, SQLModel, Cohere SDK (>=5.5.8), Next.js 15
+**Storage**: SQLite (dev) / Neon PostgreSQL (prod) via SQLModel
+**Testing**: Manual validation (Phase 7), structured test scenarios
+**Target Platform**: Docker containers on Minikube (local), Hugging Face Spaces (prod)
+**Project Type**: Web application (frontend + backend)
+**Constraints**: Stateless server, user isolation, tool-first execution, constitution v1.0.0
 
-## Phase 5 — CHAT API ENDPOINT
-1. Create POST /api/{user_id}/chat endpoint in FastAPI
-2. Implement JWT validation middleware for authentication
-3. Build conversation reconstruction logic from database
-4. Integrate agent execution lifecycle into endpoint
-5. Implement request/response validation
-6. Format agent responses for frontend consumption
-7. Add proper error handling and logging
-8. Implement rate limiting to prevent abuse
-9. Add response streaming capability for better UX
+## Constitution Check
 
-## Phase 6 — FRONTEND CHAT UI INTEGRATION
-1. Add floating chatbot icon to main navigation
-2. Create slide-out chat panel component
-3. Implement real-time message display with typing indicators
-4. Wire chat panel to backend API endpoint
-5. Handle loading states during AI processing
-6. Implement error display for API failures
-7. Create empty state for initial chat experience
-8. Add mobile-responsive design adjustments
-9. Implement smooth animations and transitions
-10. Add keyboard shortcuts for power users
+*GATE: Must pass before implementation. Re-check after Phase 4.*
 
-## Phase 7 — SECURITY & AUTH
-1. Enforce JWT validation on all chat endpoints
-2. Implement user isolation at database query level
-3. Add authorization checks to all task operations
-4. Prevent cross-user data access through conversation context
-5. Implement safe prompt boundaries to prevent injection
-6. Add input sanitization for all user messages
-7. Validate that tools only operate on user-owned data
-8. Implement audit logging for AI interactions
-9. Add rate limiting to prevent API abuse
+| # | Principle | Status | Evidence |
+|---|-----------|--------|----------|
+| I | User Safety & Isolation | PASS | Every MCP tool requires `user_id`; repositories filter by `user_id` in all queries; chat endpoint verifies JWT `sub` matches path `user_id` (403 on mismatch) |
+| II | Stateless Architecture | PASS | `process_message()` reconstructs context from DB on every call; no global state; messages persisted after each turn |
+| III | Tool-First Execution | PASS | All 5 MCP tools registered in `TOOLS_REGISTRY`; agent calls `_execute_tool()` for every task operation; no simulated results |
+| IV | Deterministic Behavior | PASS | Same input triggers same tool with same parameters; error responses follow `error_handling` skill mapping; unknown commands produce capabilities summary |
+| — | Security & Auth | PASS | JWT validation on all endpoints; bcrypt passwords; secrets from env vars; CORS allowlist; error sanitization |
+| — | Smallest Viable Diff | PASS | Plan touches only AI chatbot module and new infra files; existing frontend routes and backend endpoints unchanged |
 
-## Phase 8 — TESTING & VALIDATION
-1. Write unit tests for MCP tools with mocked database calls
-2. Create integration tests for agent behavior with sample prompts
-3. Test edge cases: task not found, empty lists, ambiguous commands
-4. Implement restart-resilience tests for conversation continuity
-5. Create security tests for user isolation
-6. Perform load testing on chat endpoint
-7. Test multi-turn conversation context preservation
-8. Validate error handling scenarios
-9. Run end-to-end tests with real user flows
+**Gate result**: ALL PASS — proceed to implementation.
 
-## Phase 9 — FINAL POLISH & DELIVERY
-1. Clean up code with proper documentation and type hints
-2. Implement comprehensive logging for debugging and monitoring
-3. Update README with setup instructions and usage examples
-4. Create deployment configuration files
-5. Add health check endpoints for monitoring
-6. Perform final security review
-7. Conduct user acceptance testing
-8. Prepare deployment checklist
-9. Document known limitations and future enhancements
-10. Create backup and recovery procedures
+## Project Structure
 
-## Success Criteria
-- All user stories from the specification are implemented and tested
-- AI can successfully interpret natural language and perform task operations
-- Security requirements are met with proper user isolation
-- System performs within acceptable response time limits
-- Frontend provides smooth, intuitive chat experience
-- Error handling gracefully manages all edge cases
+### Documentation (this feature)
+
+```text
+specs/004-ai-todo-chatbot/
+├── spec.md              # Feature specification (v2)
+├── plan.md              # This file
+├── research.md          # Phase 0 research output
+├── data-model.md        # Entity definitions
+├── contracts/
+│   └── api-contracts.md # Chat + MCP tool contracts
+├── quickstart.md        # Setup guide
+├── checklists/
+│   └── requirements.md  # Spec quality checklist
+└── tasks.md             # Task breakdown (generated by /sp.tasks)
+```
+
+### Source Code (repository root)
+
+```text
+backend/
+├── app/                          # Existing FastAPI app (NOT modified)
+│   ├── api/v1/                   # Auth + Task REST endpoints
+│   ├── core/                     # Config, DB, Security
+│   ├── models/                   # User, Task models
+│   └── services/                 # Task, User services
+├── ai_chatbot/                   # AI Chatbot module (existing)
+│   ├── agent/
+│   │   ├── agent.py              # TodoAgent (process_message, run_conversation)
+│   │   └── cohere_provider.py    # CohereProvider (LLM abstraction)
+│   ├── api/
+│   │   └── chat_endpoint.py      # POST /{user_id}/chat + history
+│   ├── database/
+│   │   ├── models.py             # Task, Conversation, Message (ai_* tables)
+│   │   ├── repositories.py       # TaskRepo, ConversationRepo, MessageRepo
+│   │   └── engine.py             # DB session factory
+│   ├── middleware/
+│   │   └── jwt_middleware.py      # JWTService
+│   ├── tools/
+│   │   ├── __init__.py           # TOOLS_REGISTRY
+│   │   ├── add_task.py
+│   │   ├── list_tasks.py
+│   │   ├── complete_task.py
+│   │   ├── update_task.py
+│   │   └── delete_task.py
+│   └── config.py                 # Cohere + DB config
+├── Dockerfile                    # NEW — multi-stage build
+├── requirements.txt
+└── .env.example                  # NEW — documented env vars
+
+frontend/
+├── app/                          # Next.js App Router pages
+├── components/
+│   ├── Chatbot.tsx               # Chat widget (existing)
+│   ├── Navbar.tsx
+│   ├── TaskCard.tsx
+│   └── ...
+├── lib/
+│   ├── api.ts                    # API client (sendChatMessage, etc.)
+│   └── auth.ts                   # JWT + session helpers
+├── Dockerfile                    # NEW — multi-stage build
+└── .env.example                  # NEW — documented env vars
+
+helm/                             # NEW — Helm charts
+└── todo-chatbot/
+    ├── Chart.yaml
+    ├── values.yaml
+    └── templates/
+        ├── backend-deployment.yaml
+        ├── backend-service.yaml
+        ├── frontend-deployment.yaml
+        ├── frontend-service.yaml
+        └── configmap.yaml
+```
+
+**Structure Decision**: Web application pattern (backend/ + frontend/).
+Existing code is NOT modified — only new files are added (Dockerfiles,
+Helm charts, .env.example). The AI chatbot module lives entirely within
+`backend/ai_chatbot/` as a self-contained subpackage.
+
+## Implementation Phases
+
+### Phase 1 — Backend Integration (Verify & Harden)
+
+**Goal**: Verify all existing backend components work correctly together.
+**Status**: Already implemented — this phase is verification only.
+
+| Step | Action | Files | FR |
+|------|--------|-------|-----|
+| 1.1 | Verify all 5 MCP tools are registered in TOOLS_REGISTRY | `backend/ai_chatbot/tools/__init__.py` | FR-011 |
+| 1.2 | Verify each tool enforces user_id isolation | All tool files | FR-012 |
+| 1.3 | Verify tool response format (success/failure + message) | All tool files | FR-013 |
+| 1.4 | Verify JWT validation on chat endpoint | `chat_endpoint.py` | FR-002, FR-003 |
+| 1.5 | Verify user_id path-token match (403 on mismatch) | `chat_endpoint.py` | FR-003 |
+| 1.6 | Create `backend/.env.example` with documented vars | NEW file | Security |
+
+### Phase 2 — AI Agent Execution (Verify & Harden)
+
+**Goal**: Verify agent correctly routes intent to tools and handles responses.
+**Status**: Already implemented — this phase is verification only.
+
+| Step | Action | Files | FR |
+|------|--------|-------|-----|
+| 2.1 | Verify CohereProvider connects with API key from env | `cohere_provider.py` | FR-007 |
+| 2.2 | Verify agent injects user_id into all tool calls | `agent.py:171` | FR-012 |
+| 2.3 | Verify tool results are checked for success/failure | `agent.py:187-213` | FR-010 |
+| 2.4 | Verify system prompt follows constitution principles | `agent.py:72-124` | Constitution |
+| 2.5 | Verify error fallback returns safe message | `agent.py:233-249` | FR-020 |
+
+### Phase 3 — Conversation Persistence (Verify & Harden)
+
+**Goal**: Verify stateless conversation lifecycle works correctly.
+**Status**: Already implemented — this phase is verification only.
+
+| Step | Action | Files | FR |
+|------|--------|-------|-----|
+| 3.1 | Verify conversation creation on first message | `chat_endpoint.py:80-99` | FR-004 |
+| 3.2 | Verify history fetch (last 10 messages) | `agent.py:147` | FR-004 |
+| 3.3 | Verify message persistence (user + assistant) | `agent.py:282-302` | FR-005 |
+| 3.4 | Verify stateless reconstruction (no in-memory state) | `agent.py:141-155` | FR-006 |
+| 3.5 | Verify graceful degradation on history fetch failure | `agent.py:233` | Constitution II |
+
+### Phase 4 — Frontend Chat UI (Verify & Enhance)
+
+**Goal**: Verify chatbot UI works and add any missing UX states.
+**Status**: Already implemented — verify and enhance.
+
+| Step | Action | Files | FR |
+|------|--------|-------|-----|
+| 4.1 | Verify floating chat icon is present on auth pages | `Chatbot.tsx` | FR-015 |
+| 4.2 | Verify chat panel displays messages correctly | `Chatbot.tsx` | FR-016 |
+| 4.3 | Verify loading/typing indicator during processing | `Chatbot.tsx` | FR-017 |
+| 4.4 | Verify JWT token sent with every chat request | `api.ts` | FR-018 |
+| 4.5 | Verify tool results displayed in chat | `Chatbot.tsx` | FR-019 |
+| 4.6 | Create `frontend/.env.example` with documented vars | NEW file | Security |
+
+### Phase 5 — Containerization (NEW)
+
+**Goal**: Create production-ready Docker images for both services.
+**Status**: Not started — new work required.
+
+| Step | Action | Files | FR |
+|------|--------|-------|-----|
+| 5.1 | Create backend Dockerfile (multi-stage, Python 3.11-slim) | `backend/Dockerfile` | — |
+| 5.2 | Create frontend Dockerfile (multi-stage, Node 18-alpine) | `frontend/Dockerfile` | — |
+| 5.3 | Create docker-compose.yml for local development | `docker-compose.yml` | — |
+| 5.4 | Validate env variable injection via Docker | — | Security |
+| 5.5 | Optimize image sizes (<200MB each target) | Dockerfiles | — |
+| 5.6 | Verify both containers start and communicate | — | — |
+
+### Phase 6 — Kubernetes Deployment (NEW)
+
+**Goal**: Deploy to Minikube via Helm charts.
+**Status**: Not started — new work required.
+
+| Step | Action | Files | FR |
+|------|--------|-------|-----|
+| 6.1 | Create Helm chart structure | `helm/todo-chatbot/` | — |
+| 6.2 | Define values.yaml with image, port, replica configs | `helm/todo-chatbot/values.yaml` | — |
+| 6.3 | Create backend Deployment + Service templates | `helm/todo-chatbot/templates/` | — |
+| 6.4 | Create frontend Deployment + Service templates | `helm/todo-chatbot/templates/` | — |
+| 6.5 | Create ConfigMap for environment variables | `helm/todo-chatbot/templates/` | Security |
+| 6.6 | Deploy to Minikube and verify pod health | — | — |
+| 6.7 | Expose services and verify connectivity | — | — |
+| 6.8 | Verify scaling (2+ replicas for backend) | — | — |
+
+### Phase 7 — Validation & Testing
+
+**Goal**: Systematic validation of all user stories and edge cases.
+**Status**: Not started — execution required.
+
+| Step | Validation | User Story | SC |
+|------|-----------|------------|-----|
+| 7.1 | Add task via chatbot, verify in DB | US1 | SC-001 |
+| 7.2 | List tasks (all/pending/completed) | US1 | SC-001 |
+| 7.3 | Complete task via chatbot | US1 | SC-001 |
+| 7.4 | Update task via chatbot | US1 | SC-001 |
+| 7.5 | Delete task via chatbot (with confirmation) | US1 | SC-001 |
+| 7.6 | Multi-turn: add task then follow up | US2 | SC-006 |
+| 7.7 | Conversation persists after page reload | US2 | SC-006 |
+| 7.8 | Unauthenticated access rejected | US3 | SC-003 |
+| 7.9 | Cross-user access rejected (403) | US3 | SC-003 |
+| 7.10 | Unknown command shows capabilities | US5 | SC-005 |
+| 7.11 | Invalid task ID returns helpful message | US5 | SC-005 |
+| 7.12 | Empty message returns prompt with examples | US5 | SC-005 |
+
+### Phase 8 — Final Readiness
+
+**Goal**: Logging, cleanup, documentation, demo readiness.
+**Status**: Not started — execution required.
+
+| Step | Action | Files |
+|------|--------|-------|
+| 8.1 | Verify structured error logging in agent | `agent.py` |
+| 8.2 | Remove debug print statements | All backend files |
+| 8.3 | Verify no secrets in committed code | All files |
+| 8.4 | Verify .gitignore covers .env files | `.gitignore` |
+| 8.5 | Final constitution compliance re-check | Constitution v1.0.0 |
+
+## Complexity Tracking
+
+No constitution violations. No additional complexity beyond what
+the feature requires.
+
+## Dependencies & Execution Order
+
+```
+Phase 1 (Backend verify) ──┐
+Phase 2 (Agent verify)  ───┤── Can run in parallel
+Phase 3 (Convo verify)  ───┤
+Phase 4 (Frontend verify) ─┘
+         │
+         ▼
+Phase 5 (Docker) ── depends on Phases 1-4 passing
+         │
+         ▼
+Phase 6 (K8s/Helm) ── depends on Phase 5 images
+         │
+         ▼
+Phase 7 (Validation) ── depends on Phase 6 deployment
+         │
+         ▼
+Phase 8 (Final) ── depends on Phase 7 passing
+```
+
+**Phases 1–4** can run in parallel (verification of existing code).
+**Phases 5–8** must run sequentially (each depends on prior output).

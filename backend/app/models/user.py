@@ -1,6 +1,6 @@
-from sqlmodel import Field, SQLModel, Relationship
+from sqlmodel import Field, SQLModel
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 
 class UserBase(SQLModel):
@@ -14,10 +14,6 @@ class User(UserBase, table=True):
     hashed_password: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
-    tasks: list["Task"] = Relationship(default_factory=list)
-    conversations: list["Conversation"] = Relationship(default_factory=list)
-
 
 class UserCreate(UserBase):
     password: str
@@ -26,5 +22,3 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     id: int
     created_at: datetime
-
-

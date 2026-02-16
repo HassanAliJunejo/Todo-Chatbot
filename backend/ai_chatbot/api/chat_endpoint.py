@@ -3,6 +3,7 @@ Chat API endpoint for AI Todo Chatbot
 Handles POST /api/{user_id}/chat requests
 """
 
+import time
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlmodel import Session
@@ -11,13 +12,14 @@ from pydantic import BaseModel
 
 from ..database.engine import get_session
 from ..middleware.jwt_middleware import JWTService
+from ..middleware.rate_limiter import chat_rate_limiter
+from ..middleware.audit_logger import AuditLogger
 from ..agent.agent import TodoAgent
 from ..database.repositories import ConversationRepository, MessageRepository
 
 
 router = APIRouter()
 security = HTTPBearer()
-print("Chat router created")
 
 
 class ChatRequest(BaseModel):
@@ -58,13 +60,26 @@ def chat(
     Returns:
         ChatResponse with AI response and tool execution results
     """
+    start_time = time.time()
+
     try:
         # Verify that the user ID in the token matches the one in the path
         if authenticated_user_id != user_id:
+            AuditLogger.log_auth_failure(user_id, "user_id mismatch between path and JWT")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are not authorized to access this resource"
             )
+
+        # Rate limiting
+        try:
+            chat_rate_limiter.check(user_id)
+        except HTTPException:
+            AuditLogger.log_rate_limit(user_id)
+            raise
+
+        # Audit: log incoming request
+        AuditLogger.log_chat_request(user_id, request.message, request.conversation_id)
 
         # Create the AI agent
         agent = TodoAgent(session)
@@ -79,42 +94,41 @@ def chat(
         # Ensure conversation_id is never None
         conversation_id = result.get("conversation_id")
         if conversation_id is None:
-            # Create a new conversation if none exists
             try:
-                from ..database.repositories import ConversationRepository
                 conversation_repo = ConversationRepository(session)
                 conversation = conversation_repo.create_conversation(
                     conversation_create={"title": "New Chat"},
                     user_id=user_id
                 )
                 conversation_id = conversation.id
-            except Exception as e:
-                print(f"Error creating conversation: {e}")
-                # Use a default conversation ID if creation fails
+            except Exception:
                 conversation_id = 1
 
-        # Ensure we never return None for conversation_id - EXTRA SAFETY
-        conversation_id = conversation_id or 1
-        if conversation_id is None or not isinstance(conversation_id, int):
-            conversation_id = 1
-
-        # Ensure final safety check and return raw response to bypass Pydantic validation issues
+        # Ensure we never return None for conversation_id
         safe_conversation_id = result.get("conversation_id") or conversation_id or 1
-        if safe_conversation_id is None:
-            safe_conversation_id = 1
-
-        # Validate that it's an integer
         if not isinstance(safe_conversation_id, int):
             try:
                 safe_conversation_id = int(safe_conversation_id)
             except (ValueError, TypeError):
                 safe_conversation_id = 1
 
+        # Audit: log response
+        duration_ms = (time.time() - start_time) * 1000
+        tools_executed = [tr["tool_name"] for tr in result.get("tool_results", [])]
+        response_text = result.get("response_text", "")
+        AuditLogger.log_chat_response(
+            user_id=user_id,
+            conversation_id=safe_conversation_id,
+            response_length=len(response_text),
+            tools_executed=tools_executed,
+            duration_ms=duration_ms
+        )
+
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content={
                 "conversation_id": safe_conversation_id,
-                "response": result.get("response_text", "I'm sorry, I couldn't process that request."),
+                "response": response_text or "I'm sorry, I couldn't process that request.",
                 "has_tools_executed": result.get("has_tools_executed", False),
                 "tool_results": result.get("tool_results", []),
                 "message_id": result.get("message_id", None)
@@ -124,16 +138,13 @@ def chat(
     except HTTPException:
         raise
     except Exception as e:
-        # DEBUG: Print the actual exception to see what's happening
-        print(f"DEBUG: Exception in chat endpoint: {e}")
-        import traceback
-        print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+        duration_ms = (time.time() - start_time) * 1000
+        AuditLogger.log_error(user_id, str(e), context="chat_endpoint")
 
-        # Create a default response to avoid validation errors
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content={
-                "conversation_id": 1,  # Default conversation ID
+                "conversation_id": 1,
                 "response": "I'm sorry, I encountered an error processing your request.",
                 "has_tools_executed": False,
                 "tool_results": [],
@@ -168,15 +179,26 @@ async def new_conversation(
     Returns:
         ChatResponse with AI response and tool execution results
     """
+    start_time = time.time()
+
     try:
-        print(f"Chat endpoint: user_id from path: {user_id}, authenticated_user_id from token: {authenticated_user_id}")
         # Verify that the user ID in the token matches the one in the path
         if authenticated_user_id != user_id:
-            print(f"Chat endpoint: Authorization failed - user_id mismatch: path={user_id}, token={authenticated_user_id}")
+            AuditLogger.log_auth_failure(user_id, "user_id mismatch in new_conversation")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You are not authorized to access this resource"
             )
+
+        # Rate limiting
+        try:
+            chat_rate_limiter.check(user_id)
+        except HTTPException:
+            AuditLogger.log_rate_limit(user_id)
+            raise
+
+        # Audit: log incoming request
+        AuditLogger.log_chat_request(user_id, request.message)
 
         # Create the AI agent
         agent = TodoAgent(session)
@@ -188,10 +210,21 @@ async def new_conversation(
             conversation_title=request.title
         )
 
-        # Ensure conversation_id is valid and return raw response to avoid validation issues
+        # Ensure conversation_id is valid
         conversation_id = result.get("conversation_id") or 1
-        if conversation_id is None or not isinstance(conversation_id, int):
+        if not isinstance(conversation_id, int):
             conversation_id = 1
+
+        # Audit: log response
+        duration_ms = (time.time() - start_time) * 1000
+        tools_executed = [tr["tool_name"] for tr in result.get("tool_results", [])]
+        AuditLogger.log_chat_response(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            response_length=len(result.get("response_text", "")),
+            tools_executed=tools_executed,
+            duration_ms=duration_ms
+        )
 
         from fastapi.responses import JSONResponse
         return JSONResponse(
@@ -207,17 +240,95 @@ async def new_conversation(
     except HTTPException:
         raise
     except Exception as e:
-        # Create a default response to avoid validation errors
+        duration_ms = (time.time() - start_time) * 1000
+        AuditLogger.log_error(user_id, str(e), context="new_conversation")
+
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content={
-                "conversation_id": 1,  # Default conversation ID
+                "conversation_id": 1,
                 "response": "I'm sorry, I encountered an error creating the conversation.",
                 "has_tools_executed": False,
                 "tool_results": [],
                 "message_id": None
             }
         )
+
+
+# Streaming chat endpoint (SSE)
+@router.post("/{user_id}/chat/stream")
+def chat_stream(
+    user_id: int,
+    request: ChatRequest,
+    session: Session = Depends(get_session),
+    authenticated_user_id: int = Depends(JWTService.get_current_user_id)
+):
+    """
+    Streaming chat endpoint using Server-Sent Events.
+    Sends the response in chunks for better perceived latency.
+    """
+    import json
+    from fastapi.responses import StreamingResponse
+
+    # Auth check
+    if authenticated_user_id != user_id:
+        AuditLogger.log_auth_failure(user_id, "user_id mismatch in stream")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to access this resource"
+        )
+
+    # Rate limiting
+    try:
+        chat_rate_limiter.check(user_id)
+    except HTTPException:
+        AuditLogger.log_rate_limit(user_id)
+        raise
+
+    AuditLogger.log_chat_request(user_id, request.message, request.conversation_id)
+
+    def generate():
+        start_time_stream = time.time()
+        try:
+            agent = TodoAgent(session)
+            result = agent.process_message(
+                user_message=request.message,
+                user_id=user_id,
+                conversation_id=request.conversation_id
+            )
+
+            conversation_id = result.get("conversation_id") or 1
+
+            # Send tool results first
+            if result.get("tool_results"):
+                yield f"data: {json.dumps({'type': 'tools', 'tool_results': result['tool_results']})}\n\n"
+
+            # Stream the response text in chunks
+            response_text = result.get("response_text", "")
+            chunk_size = 20  # characters per chunk
+            for i in range(0, len(response_text), chunk_size):
+                chunk = response_text[i:i + chunk_size]
+                yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
+
+            # Send completion event
+            yield f"data: {json.dumps({'type': 'done', 'conversation_id': conversation_id})}\n\n"
+
+            # Audit log
+            duration_ms = (time.time() - start_time_stream) * 1000
+            tools_executed = [tr["tool_name"] for tr in result.get("tool_results", [])]
+            AuditLogger.log_chat_response(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                response_length=len(response_text),
+                tools_executed=tools_executed,
+                duration_ms=duration_ms
+            )
+
+        except Exception as e:
+            AuditLogger.log_error(user_id, str(e), context="chat_stream")
+            yield f"data: {json.dumps({'type': 'error', 'message': 'An error occurred processing your request.'})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 # Endpoint to get conversation history

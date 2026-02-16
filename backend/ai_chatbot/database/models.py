@@ -4,15 +4,10 @@ Defines Task, Conversation, and Message entities with proper relationships
 """
 
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    from .models import Task
-
-
-# User model - Use the same model as the main application
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -25,7 +20,7 @@ class TaskBase(SQLModel):
     description: Optional[str] = Field(default=None, max_length=1000)
     completed: bool = Field(default=False)
     due_date: Optional[datetime] = Field(default=None)
-    priority: Optional[str] = Field(default="medium", max_length=20)  # low, medium, high
+    priority: Optional[str] = Field(default="medium", max_length=20)
     user_id: int = Field(foreign_key="user.id")
 
 
@@ -35,9 +30,6 @@ class Task(TaskBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    # Relationship to user
-    user: User = Relationship()
 
 
 class TaskCreate(TaskBase):
@@ -55,7 +47,7 @@ class TaskUpdate(SQLModel):
     description: Optional[str] = None
     completed: Optional[bool] = None
     due_date: Optional[datetime] = None
-    priority: Optional[str] = None  # low, medium, high
+    priority: Optional[str] = None
 
 
 # Conversation model
@@ -72,8 +64,7 @@ class Conversation(ConversationBase, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
-    user: User = Relationship()
-    messages: list["Message"] = Relationship(back_populates="conversation")
+    messages: List["Message"] = Relationship(back_populates="conversation")
 
 
 class ConversationCreate(ConversationBase):
@@ -88,7 +79,7 @@ class ConversationRead(ConversationBase):
 
 # Message model
 class MessageBase(SQLModel):
-    role: str = Field(max_length=20)  # user, assistant, system
+    role: str = Field(max_length=20)
     content: str = Field(min_length=1)
     conversation_id: int = Field(foreign_key="ai_conversations.id")
 
@@ -111,8 +102,5 @@ class MessageRead(MessageBase):
     id: int
     created_at: datetime
 
-
-# Link User to related models
-# User.model_rebuild()
 
 Conversation.model_rebuild()

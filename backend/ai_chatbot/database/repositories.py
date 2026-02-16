@@ -90,9 +90,13 @@ class ConversationRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def create_conversation(self, conversation_create: ConversationCreate, user_id: int) -> Conversation:
+    def create_conversation(self, conversation_create, user_id: int) -> Conversation:
         """Create a new conversation for a specific user"""
-        conversation = Conversation(**conversation_create.dict(), user_id=user_id)
+        if isinstance(conversation_create, dict):
+            data = conversation_create
+        else:
+            data = conversation_create.model_dump()
+        conversation = Conversation(**data, user_id=user_id)
         self.session.add(conversation)
         self.session.commit()
         self.session.refresh(conversation)

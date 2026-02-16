@@ -1,0 +1,161 @@
+# Default values for todo-chatbot
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Backend service configuration
+backend:
+  replicaCount: 2
+
+  image:
+    repository: todo-chatbot-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  # Resource limits and requests
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  # Health check probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Environment variables (non-sensitive)
+  env:
+    LOG_LEVEL: "info"
+    ENVIRONMENT: "production"
+
+  # Secrets (should be provided via external secret management in production)
+  # These are placeholder values - DO NOT use in production
+  secrets:
+    DATABASE_URL: "postgresql://user:password@postgres:5432/tododb"
+    COHERE_API_KEY: "your-cohere-api-key-here"
+    JWT_SECRET: "your-jwt-secret-here"
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  # Autoscaling configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# Frontend service configuration
+frontend:
+  replicaCount: 1
+
+  image:
+    repository: todo-chatbot-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: NodePort
+    port: 3000
+    targetPort: 3000
+    nodePort: 30080  # Fixed NodePort for Minikube access
+
+  # Resource limits and requests
+  resources:
+    limits:
+      cpu: 300m
+      memory: 384Mi
+    requests:
+      cpu: 150m
+      memory: 192Mi
+
+  # Health check probes
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Environment variables
+  env:
+    NODE_ENV: "production"
+    # Backend URL will be set via configmap to use internal service name
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  # Autoscaling configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 75
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations
+podAnnotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Image pull secrets
+imagePullSecrets: []

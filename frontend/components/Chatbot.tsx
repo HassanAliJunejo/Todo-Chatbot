@@ -155,6 +155,24 @@ const Chatbot = ({ userId }: { userId: number }) => {
     setIsOpen(!isOpen);
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape: close chat panel
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+      // Ctrl+Shift+K: toggle chat panel
+      if (e.ctrlKey && e.shiftKey && e.key === 'K') {
+        e.preventDefault();
+        setIsOpen(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   return (
     <>
       {/* Floating Chat Icon */}

@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "todo-chatbot.fullname" . }}-backend
+  labels:
+    {{- include "todo-chatbot.backend.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "todo-chatbot.backend.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "todo-chatbot.backend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "todo-chatbot.serviceAccountName" . }}
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: backend
+        image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+        imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.backend.service.targetPort }}
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "{{ .Values.backend.service.targetPort }}"
+        {{- range $key, $value := .Values.backend.env }}
+        - name: {{ $key }}
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "todo-chatbot.fullname" $ }}-config
+              key: {{ $key }}
+        {{- end }}
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "todo-chatbot.fullname" . }}-backend-secret
+              key: DATABASE_URL
+        - name: COHERE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "todo-chatbot.fullname" . }}-backend-secret
+              key: COHERE_API_KEY
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "todo-chatbot.fullname" . }}-backend-secret
+              key: JWT_SECRET
+        {{- with .Values.backend.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.backend.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.backend.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.backend.securityContext | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
